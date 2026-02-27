@@ -1,0 +1,32 @@
+2026-02-27 11:54:20,744 [INFO] ==================================================
+2026-02-27 11:54:20,744 [INFO] Starting Weather ETL Pipeline
+2026-02-27 11:54:20,744 [INFO] ==================================================
+2026-02-27 11:54:20,744 [INFO] Fetching weather data for (42.36, -71.06) from 2025-01-01 to 2025-12-31...
+2026-02-27 11:54:22,931 [INFO]   ✓ Received 8760 hourly records
+2026-02-27 11:54:22,931 [INFO] Transforming raw data into a clean table...
+/Users/nat/Projects/weather_etl/etl.py:111: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+A typical example is when you are setting values in a column of a DataFrame, like:
+
+df["col"][row_indexer] = value
+
+Use `df.loc[row_indexer, "col"] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+
+  df["recorded_at"] = pd.to_datetime(df["recorded_at"])
+2026-02-27 11:54:22,953 [INFO]   ✓ Transformed 8760 rows, 9 columns
+2026-02-27 11:54:22,954 [INFO] 
+Sample of data to be loaded:
+2026-02-27 11:54:22,956 [INFO] Connecting to Redshift and loading 8760 rows into 'weather_hourly'...
+2026-02-27 11:59:42,432 [INFO]   ✓ Successfully loaded 8760 rows into weather_hourly
+2026-02-27 11:59:42,434 [INFO] ==================================================
+2026-02-27 11:59:42,434 [INFO] Pipeline complete!
+2026-02-27 11:59:42,434 [INFO] ==================================================
+        recorded_at  temperature_f  humidity_pct  precipitation_in  wind_speed_mph  weather_code location_name  latitude  longitude
+2025-01-01 00:00:00           41.1            91              0.00            10.3             3    Boston, MA 42.355007  -71.12906
+2025-01-01 01:00:00           43.2            88              0.00            12.6             3    Boston, MA 42.355007  -71.12906
+2025-01-01 02:00:00           44.0            87              0.08            15.0            61    Boston, MA 42.355007  -71.12906
+2025-01-01 03:00:00           43.9            92              0.08            15.7            61    Boston, MA 42.355007  -71.12906
+2025-01-01 04:00:00           44.3            96              0.11            14.9            63    Boston, MA 42.355007  -71.12906
+
