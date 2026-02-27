@@ -141,25 +141,27 @@ def load_to_redshift(df: pd.DataFrame, table_name: str = "weather_hourly") -> No
     log.info(f"Connecting to Redshift and loading {len(df)} rows into '{table_name}'...")
 
     # Connect to Redshift using credentials from config.py
-    conn = psycopg.connect(**DB_CONFIG)
+    conn = psycopg.connect(**DB_CONFIG, client_encoding='utf8')
 
     try:
         with conn.cursor() as cursor:
-            # Create a temporary staging table to hold our new data
-            # This lets us do an "upsert" (update if exists, insert if new)
+            # Column names from the DataFrame (excludes auto-generated 'id' and 'loaded_at')
+            columns = list(df.columns)
+            cols_joined = ', '.join(columns)
+
+            # Create a staging table with only the data columns (no id or loaded_at)
+            # This avoids conflicts with Redshift's IDENTITY and DEFAULT columns
             cursor.execute(f"""
-                CREATE TEMP TABLE staging_{table_name} (LIKE {table_name});
+                CREATE TEMP TABLE staging_{table_name} AS
+                SELECT {cols_joined} FROM {table_name} WHERE 1=0;
             """)
 
             # Convert DataFrame to a list of tuples (one per row)
             rows = [tuple(row) for row in df.itertuples(index=False)]
 
-            # Column names in the order they appear in the DataFrame
-            columns = list(df.columns)
-
-            # Bulk-insert all rows into the staging table (much faster than one-by-one)
+            # Bulk-insert all rows into the staging table
             insert_sql = f"""
-                INSERT INTO staging_{table_name} ({', '.join(columns)})
+                INSERT INTO staging_{table_name} ({cols_joined})
                 VALUES ({', '.join(['%s'] * len(columns))})
             """
             cursor.executemany(insert_sql, rows)
@@ -172,10 +174,10 @@ def load_to_redshift(df: pd.DataFrame, table_name: str = "weather_hourly") -> No
                   AND {table_name}.recorded_at   = staging_{table_name}.recorded_at;
             """)
 
-            # Insert the new/updated rows from staging into the real table
+            # Insert from staging into the real table (id and loaded_at auto-generated)
             cursor.execute(f"""
-                INSERT INTO {table_name}
-                SELECT * FROM staging_{table_name};
+                INSERT INTO {table_name} ({cols_joined})
+                SELECT {cols_joined} FROM staging_{table_name};
             """)
 
         # Commit the transaction (save the changes)
