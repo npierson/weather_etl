@@ -12,7 +12,11 @@ weather data from a free public API and loads it into Amazon Redshift.
 ---
 
 **Notes on handy command line preps**
-- Start up the Python virtual env -- source virtual_weather_etl/bin/activate
+- Start up the Python virtual env -- 
+    create
+        python3 -m venv virtual_weather_etl/bin/activate
+    activate    
+        source virtual_weather_etl/bin/activate
 - python3 etl.py 2>&1 | tee -a output.log (this dumps/appends to a log, remove the -a if you do not want to append)
 
 ## 📁 Project Structure

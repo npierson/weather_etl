@@ -3,3 +3,5 @@ venv/
 __pycache__/
 *.pyc
 .env
+*.pass
+virtual_weather_etl
