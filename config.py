@@ -15,16 +15,22 @@ load_dotenv()
 
 
 # ─────────────────────────────────────────────
-# REDSHIFT DATABASE CONNECTION
+# SNOWFLAKE DATABASE CONNECTION
 # ─────────────────────────────────────────────
 # These are read from your .env file.
 # See .env.example for instructions on filling them in.
+#
+# How to find your account identifier:
+#   Snowflake UI → bottom-left corner → hover your username → "Copy account identifier"
+#   Format is usually: <orgname>-<accountname>  (e.g. "myorg-myaccount")
 DB_CONFIG = {
-    "host":     os.getenv("REDSHIFT_HOST"),      # e.g. "my-cluster.abc123.us-east-1.redshift.amazonaws.com"
-    "port":     int(os.getenv("REDSHIFT_PORT", "5439")),  # Redshift default port is 5439
-    "dbname":   os.getenv("REDSHIFT_DB"),        # e.g. "dev"
-    "user":     os.getenv("REDSHIFT_USER"),      # e.g. "admin"
-    "password": os.getenv("REDSHIFT_PASSWORD"),  # your Redshift password
+    "account":   os.getenv("SNOWFLAKE_ACCOUNT"),    # e.g. "myorg-myaccount"
+    "user":      os.getenv("SNOWFLAKE_USER"),        # e.g. "nat"
+    "password":  os.getenv("SNOWFLAKE_PASSWORD"),
+    "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),   # default warehouse name on free trial
+    "database":  os.getenv("SNOWFLAKE_DATABASE", "WEATHER_DB"),
+    "schema":    os.getenv("SNOWFLAKE_SCHEMA",   "WEATHER"),
+    "role":      os.getenv("SNOWFLAKE_ROLE",     "ACCOUNTADMIN"),  # ACCOUNTADMIN is default on free trial
 }
 
 

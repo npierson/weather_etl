@@ -2,7 +2,7 @@
 # Install all dependencies with:
 #   pip install -r requirements.txt
 
-requests==2.32.3        # Making HTTP API calls
-pandas==2.2.3           # Working with tabular data
-psycopg[binary]>=3.1    # Connecting to Redshift (PostgreSQL-compatible driver, supports Python 3.14)
-python-dotenv==1.0.1    # Loading credentials from the .env file
+requests==2.32.3                    # Making HTTP API calls
+pandas==2.2.3                       # Working with tabular data
+snowflake-connector-python[pandas]  # Connecting to Snowflake (includes write_pandas support)
+python-dotenv==1.0.1                # Loading credentials from the .env file

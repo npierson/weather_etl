@@ -1,21 +1,22 @@
 """
-weather_etl.py
-==============
+etl.py
+======
 A beginner-friendly ETL (Extract → Transform → Load) pipeline that:
   1. EXTRACTS weather data from the free Open-Meteo API
   2. TRANSFORMS it into a clean table using pandas
-  3. LOADS it into an Amazon Redshift table
+  3. LOADS it into a Snowflake table
 
 What you'll learn:
   - How to call a public API with the `requests` library
   - How to clean and reshape data with `pandas`
-  - How to connect to a database and insert rows with `psycopg2`
+  - How to connect to Snowflake and insert rows with `snowflake-connector-python`
 """
 
-import requests          # for making HTTP API calls
-import pandas as pd      # for working with tabular data
-import psycopg           # for connecting to Redshift (it's PostgreSQL-compatible)
-import logging           # for printing helpful status messages
+import requests                          # for making HTTP API calls
+import pandas as pd                      # for working with tabular data
+import snowflake.connector               # for connecting to Snowflake
+from snowflake.connector.pandas_tools import write_pandas  # fast bulk load via pandas
+import logging                           # for printing helpful status messages
 from config import DB_CONFIG, WEATHER_CONFIG
 
 # ─────────────────────────────────────────────
@@ -91,7 +92,7 @@ def transform_weather_data(raw_data: dict, location_name: str) -> pd.DataFrame:
         location_name: A human-readable name for the location (e.g. "Boston, MA")
 
     Returns:
-        A clean DataFrame ready to be loaded into Redshift
+        A clean DataFrame ready to be loaded into Snowflake
     """
     log.info("Transforming raw data into a clean table...")
 
@@ -99,27 +100,30 @@ def transform_weather_data(raw_data: dict, location_name: str) -> pd.DataFrame:
 
     # Build a DataFrame from the hourly data
     df = pd.DataFrame({
-        "recorded_at":        hourly["time"],
-        "temperature_f":      hourly["temperature_2m"],
-        "humidity_pct":       hourly["relative_humidity_2m"],
-        "precipitation_in":   hourly["precipitation"],
-        "wind_speed_mph":     hourly["wind_speed_10m"],
-        "weather_code":       hourly["weather_code"],
+        "RECORDED_AT":        hourly["time"],
+        "TEMPERATURE_F":      hourly["temperature_2m"],
+        "HUMIDITY_PCT":       hourly["relative_humidity_2m"],
+        "PRECIPITATION_IN":   hourly["precipitation"],
+        "WIND_SPEED_MPH":     hourly["wind_speed_10m"],
+        "WEATHER_CODE":       hourly["weather_code"],
     })
 
-    # Convert the "recorded_at" column from a string to a real datetime
-    df["recorded_at"] = pd.to_datetime(df["recorded_at"])
+    # NOTE: Snowflake column names are uppercase by default.
+    # The DataFrame column names above match the table columns in create_tables_snowflake.sql.
+
+    # Convert the "RECORDED_AT" column from a string to a real datetime
+    df["RECORDED_AT"] = pd.to_datetime(df["RECORDED_AT"])
 
     # Add metadata columns
-    df["location_name"] = location_name
-    df["latitude"]      = raw_data["latitude"]
-    df["longitude"]     = raw_data["longitude"]
+    df["LOCATION_NAME"] = location_name
+    df["LATITUDE"]      = raw_data["latitude"]
+    df["LONGITUDE"]     = raw_data["longitude"]
 
     # Drop rows where ALL weather readings are missing (null)
-    df.dropna(subset=["temperature_f", "precipitation_in"], how="all", inplace=True)
+    df.dropna(subset=["TEMPERATURE_F", "PRECIPITATION_IN"], how="all", inplace=True)
 
     # Round numeric columns to 2 decimal places for tidiness
-    numeric_cols = ["temperature_f", "humidity_pct", "precipitation_in", "wind_speed_mph"]
+    numeric_cols = ["TEMPERATURE_F", "HUMIDITY_PCT", "PRECIPITATION_IN", "WIND_SPEED_MPH"]
     df[numeric_cols] = df[numeric_cols].round(2)
 
     log.info(f"  ✓ Transformed {len(df)} rows, {len(df.columns)} columns")
@@ -127,66 +131,80 @@ def transform_weather_data(raw_data: dict, location_name: str) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────
-# STEP 3: LOAD — Write data to Redshift
+# STEP 3: LOAD — Write data to Snowflake
 # ─────────────────────────────────────────────
-def load_to_redshift(df: pd.DataFrame, table_name: str = "weather_hourly") -> None:
+def load_to_snowflake(df: pd.DataFrame, table_name: str = "WEATHER_HOURLY") -> None:
     """
-    Connects to Redshift and inserts the DataFrame rows into a table.
-    Uses "upsert" logic to avoid duplicate rows if you run it multiple times.
+    Connects to Snowflake and upserts the DataFrame rows into a table.
+    Uses a staging table + MERGE to avoid duplicate rows on repeated runs.
 
     Args:
         df:         The clean DataFrame to load
-        table_name: The Redshift table to insert into
+        table_name: The Snowflake table to insert into (default: WEATHER_HOURLY)
     """
-    log.info(f"Connecting to Redshift and loading {len(df)} rows into '{table_name}'...")
+    log.info(f"Connecting to Snowflake and loading {len(df)} rows into '{table_name}'...")
 
-    # Connect to Redshift using credentials from config.py
-    conn = psycopg.connect(**DB_CONFIG, client_encoding='utf8')
+    # Connect using credentials from config.py
+    conn = snowflake.connector.connect(**DB_CONFIG)
 
     try:
         with conn.cursor() as cursor:
-            # Column names from the DataFrame (excludes auto-generated 'id' and 'loaded_at')
-            columns = list(df.columns)
-            cols_joined = ', '.join(columns)
+            # Ensure the database and schema exist (safe to run repeatedly)
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_CONFIG['database']}")
+            cursor.execute(f"USE DATABASE {DB_CONFIG['database']}")
+            cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {DB_CONFIG['schema']}")
+            cursor.execute(f"USE SCHEMA {DB_CONFIG['schema']}")
 
-            # Create a staging table with only the data columns (no id or loaded_at)
-            # This avoids conflicts with Redshift's IDENTITY and DEFAULT columns
+            staging_table = f"STAGING_{table_name}"
+
+            # Create a temp staging table with the same structure as the target
+            # (TEMPORARY means it auto-drops when the session ends)
             cursor.execute(f"""
-                CREATE TEMP TABLE staging_{table_name} AS
-                SELECT {cols_joined} FROM {table_name} WHERE 1=0;
+                CREATE TEMPORARY TABLE {staging_table} LIKE {table_name};
             """)
 
-            # Convert DataFrame to a list of tuples (one per row)
-            rows = [tuple(row) for row in df.itertuples(index=False)]
+            # Bulk-load the DataFrame into the staging table using write_pandas
+            # This is much faster than INSERT row-by-row for large datasets
+            success, num_chunks, num_rows, output = write_pandas(
+                conn=conn,
+                df=df,
+                table_name=staging_table,
+                schema=DB_CONFIG["schema"],
+                database=DB_CONFIG["database"],
+                auto_create_table=False,
+                overwrite=False,
+            )
+            log.info(f"  ✓ Staged {num_rows} rows in {num_chunks} chunk(s)")
 
-            # Bulk-insert all rows into the staging table
-            insert_sql = f"""
-                INSERT INTO staging_{table_name} ({cols_joined})
-                VALUES ({', '.join(['%s'] * len(columns))})
-            """
-            cursor.executemany(insert_sql, rows)
-
-            # Delete any existing rows that match on location + timestamp (avoid duplicates)
+            # MERGE: update existing rows or insert new ones (no duplicates)
+            # Matches on location_name + recorded_at as the natural unique key
             cursor.execute(f"""
-                DELETE FROM {table_name}
-                USING staging_{table_name}
-                WHERE {table_name}.location_name = staging_{table_name}.location_name
-                  AND {table_name}.recorded_at   = staging_{table_name}.recorded_at;
+                MERGE INTO {table_name} AS target
+                USING {staging_table} AS source
+                    ON  target.LOCATION_NAME = source.LOCATION_NAME
+                    AND target.RECORDED_AT   = source.RECORDED_AT
+                WHEN MATCHED THEN UPDATE SET
+                    target.TEMPERATURE_F    = source.TEMPERATURE_F,
+                    target.HUMIDITY_PCT     = source.HUMIDITY_PCT,
+                    target.PRECIPITATION_IN = source.PRECIPITATION_IN,
+                    target.WIND_SPEED_MPH   = source.WIND_SPEED_MPH,
+                    target.WEATHER_CODE     = source.WEATHER_CODE,
+                    target.LATITUDE         = source.LATITUDE,
+                    target.LONGITUDE        = source.LONGITUDE
+                WHEN NOT MATCHED THEN INSERT (
+                    RECORDED_AT, LOCATION_NAME, LATITUDE, LONGITUDE,
+                    TEMPERATURE_F, HUMIDITY_PCT, PRECIPITATION_IN,
+                    WIND_SPEED_MPH, WEATHER_CODE
+                ) VALUES (
+                    source.RECORDED_AT, source.LOCATION_NAME, source.LATITUDE, source.LONGITUDE,
+                    source.TEMPERATURE_F, source.HUMIDITY_PCT, source.PRECIPITATION_IN,
+                    source.WIND_SPEED_MPH, source.WEATHER_CODE
+                );
             """)
 
-            # Insert from staging into the real table (id and loaded_at auto-generated)
-            cursor.execute(f"""
-                INSERT INTO {table_name} ({cols_joined})
-                SELECT {cols_joined} FROM staging_{table_name};
-            """)
-
-        # Commit the transaction (save the changes)
-        conn.commit()
-        log.info(f"  ✓ Successfully loaded {len(df)} rows into {table_name}")
+        log.info(f"  ✓ Successfully merged {len(df)} rows into {table_name}")
 
     except Exception as e:
-        # If anything goes wrong, roll back to avoid partial writes
-        conn.rollback()
         log.error(f"  ✗ Load failed: {e}")
         raise
 
@@ -204,7 +222,7 @@ def run_pipeline():
     Edit WEATHER_CONFIG in config.py to change location and date range.
     """
     log.info("=" * 50)
-    log.info("Starting Weather ETL Pipeline")
+    log.info("Starting Weather ETL Pipeline (Snowflake)")
     log.info("=" * 50)
 
     # EXTRACT
@@ -224,7 +242,7 @@ def run_pipeline():
     print()
 
     # LOAD
-    load_to_redshift(df, table_name="weather_hourly")
+    load_to_snowflake(df, table_name="WEATHER_HOURLY")
 
     log.info("=" * 50)
     log.info("Pipeline complete!")
