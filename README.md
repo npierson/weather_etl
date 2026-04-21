@@ -1,12 +1,12 @@
 # 🌦️ Weather ETL Pipeline — Python Practice Project
 
 A beginner-friendly ETL (Extract, Transform, Load) pipeline that pulls historical
-weather data from a free public API and loads it into Amazon Redshift.
+weather data from a free public API and loads it into Snowflake.
 
 **What you'll practice:**
 - Calling a public REST API with `requests`
 - Cleaning and reshaping data with `pandas`
-- Connecting to a cloud database with `psycopg2`
+- Connecting to a cloud database with `snowflake-connector-python`
 - Structuring a real data engineering project
 
 ---
@@ -28,7 +28,7 @@ weather_etl/
 ├── .env.example        ← Template for your credentials (copy → .env)
 ├── requirements.txt    ← Python libraries to install
 └── sql/
-    └── create_tables.sql  ← Run this once in Redshift to create the table
+    └── create_tables_snowflake.sql  ← Run this once in Snowflake to create the table
 ```
 
 ---
@@ -41,69 +41,67 @@ Make sure you have Python 3.9 or newer installed.
 Check your version by running this in your terminal:
 
 ```bash
-python --version
+python3 --version
 ```
 
-### Step 2 — Install dependencies
+### Step 2 — Activate the virtual environment and install dependencies
 
-In your terminal, navigate to the project folder and run:
+This project uses a virtual environment to keep dependencies isolated. You must activate it before installing packages or running the pipeline.
 
 ```bash
-pip install -r requirements.txt
+# Create the virtual environment (only needed once)
+python3 -m venv virtual_weather_etl
+
+# Activate it (run this every time you open a new terminal)
+source virtual_weather_etl/bin/activate
 ```
 
-This installs `requests`, `pandas`, `psycopg2-binary`, and `python-dotenv`.
+Once activated, your prompt will show `(virtual_weather_etl)`. Then install dependencies:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+This installs `requests`, `pandas`, `snowflake-connector-python`, and `python-dotenv`.
 
 ---
 
-### Step 3 — Set up Amazon Redshift (free trial available)
+### Step 3 — Set up Snowflake (free trial available)
 
-You'll need an AWS account. If you don't have one, sign up at https://aws.amazon.com — it's free.
+You'll need a Snowflake account. If you don't have one, sign up at https://signup.snowflake.com — a 30-day free trial is available with $400 in credits.
 
-#### Option A: Redshift Serverless (Recommended for beginners)
-Serverless means you don't manage a cluster — AWS handles it, and you only pay when
-queries are running. There's a **free trial period** when you first sign up.
+#### Creating your Snowflake account
+1. Go to https://signup.snowflake.com and fill out the form
+2. Choose a cloud provider and region (any is fine for practice)
+3. Activate your account via the confirmation email
+4. Log in to the Snowflake web UI
 
-1. Go to the **AWS Console** → search for **"Amazon Redshift"**
-2. Click **"Try Redshift Serverless"**
-3. Choose **"Use default settings"** on the setup screen
-4. Set an **Admin username** (e.g. `admin`) and create a strong password
-5. Click **"Save configuration"**
-6. Wait 2–3 minutes for it to provision
+#### Find your account identifier
+You'll need this for the `.env` file:
+- In the Snowflake UI, look at the **bottom-left corner**
+- Hover over your username → click **"Copy account identifier"**
+- It looks like: `myorg-myaccount` (organization name + account name)
 
-#### Option B: Redshift Provisioned Cluster
-If you prefer a traditional cluster:
-1. AWS Console → Amazon Redshift → **"Create cluster"**
-2. Choose the **dc2.large** node type (cheapest option, good for practice)
-3. Set node count to **1**
-4. Create an admin username and password
-5. Under "Additional configurations" → **"Publicly accessible: Yes"** ← important!
-
-#### Find your connection details
-Once your cluster/serverless is ready:
-- Go to your cluster in the AWS Console
-- Look for **"Endpoint"** — it looks like:
-  `my-cluster.abc123xyz.us-east-1.redshift.amazonaws.com:5439/dev`
-- The parts are: `HOST:PORT/DATABASE`
-
-#### Open the firewall (for provisioned clusters only)
-1. In the AWS Console → EC2 → Security Groups
-2. Find the security group attached to your Redshift cluster
-3. Add an **Inbound Rule**: Type = `Custom TCP`, Port = `5439`, Source = `My IP`
+#### Default credentials on a free trial
+- **Warehouse:** `COMPUTE_WH` (already exists)
+- **Role:** `ACCOUNTADMIN` (your default admin role)
+- **Database/Schema:** the ETL script will create `WEATHER_DB` and `WEATHER` schema automatically
 
 ---
 
 ### Step 4 — Create your credentials file
 
 1. Copy `.env.example` and rename the copy to `.env`
-2. Fill in your Redshift connection details:
+2. Fill in your Snowflake connection details:
 
 ```
-REDSHIFT_HOST=your-cluster.abc123.us-east-1.redshift.amazonaws.com
-REDSHIFT_PORT=5439
-REDSHIFT_DB=dev
-REDSHIFT_USER=admin
-REDSHIFT_PASSWORD=your_password_here
+SNOWFLAKE_ACCOUNT=your-org-your-account
+SNOWFLAKE_USER=your_username
+SNOWFLAKE_PASSWORD=your_password_here
+SNOWFLAKE_WAREHOUSE=COMPUTE_WH
+SNOWFLAKE_DATABASE=WEATHER_DB
+SNOWFLAKE_SCHEMA=WEATHER
+SNOWFLAKE_ROLE=ACCOUNTADMIN
 
 WEATHER_LOCATION_NAME=Boston, MA
 WEATHER_LATITUDE=42.36
@@ -119,10 +117,10 @@ WEATHER_END_DATE=2025-12-31
 
 ### Step 5 — Create the database table
 
-1. In the AWS Console → Amazon Redshift → **Query editor v2**
-2. Connect to your cluster/serverless using your admin credentials
-3. Open and run the contents of `sql/create_tables.sql`
-4. You should see a `weather_hourly` table created successfully
+1. In the Snowflake UI → click **"Worksheets"** in the left sidebar
+2. Click **"+"** to open a new worksheet
+3. Paste and run the contents of `sql/create_tables_snowflake.sql`
+4. You should see a `WEATHER_HOURLY` table created in the `WEATHER_DB.WEATHER` schema
 
 ---
 
@@ -131,19 +129,20 @@ WEATHER_END_DATE=2025-12-31
 In your terminal, from the project folder:
 
 ```bash
-python etl.py
+python3 etl.py
 ```
 
 You should see output like:
 
 ```
-2026-02-25 10:00:01 [INFO] Starting Weather ETL Pipeline
+2026-02-25 10:00:01 [INFO] Starting Weather ETL Pipeline (Snowflake)
 2026-02-25 10:00:01 [INFO] Fetching weather data for (42.36, -71.06) from 2025-01-01 to 2025-12-31...
 2026-02-25 10:00:03 [INFO]   ✓ Received 8760 hourly records
 2026-02-25 10:00:03 [INFO] Transforming raw data into a clean table...
 2026-02-25 10:00:03 [INFO]   ✓ Transformed 8760 rows, 9 columns
-2026-02-25 10:00:05 [INFO] Connecting to Redshift and loading 8760 rows into 'weather_hourly'...
-2026-02-25 10:00:08 [INFO]   ✓ Successfully loaded 8760 rows into weather_hourly
+2026-02-25 10:00:05 [INFO] Connecting to Snowflake and loading 8760 rows into 'WEATHER_HOURLY'...
+2026-02-25 10:00:07 [INFO]   ✓ Staged 8760 rows in 1 chunk(s)
+2026-02-25 10:00:08 [INFO]   ✓ Successfully merged 8760 rows into WEATHER_HOURLY
 2026-02-25 10:00:08 [INFO] Pipeline complete!
 ```
 
@@ -151,36 +150,36 @@ You should see output like:
 
 ## 🔍 Explore your data
 
-After loading, open Query editor v2 and try these queries:
+After loading, open a Snowflake Worksheet and try these queries:
 
 ```sql
 -- See the 10 most recent readings
-SELECT * FROM weather_hourly ORDER BY recorded_at DESC LIMIT 10;
+SELECT * FROM WEATHER_HOURLY ORDER BY RECORDED_AT DESC LIMIT 10;
 
 -- Average temperature by month
 SELECT
-    DATE_TRUNC('month', recorded_at) AS month,
-    ROUND(AVG(temperature_f), 1)     AS avg_temp_f,
-    ROUND(AVG(humidity_pct), 1)      AS avg_humidity,
-    SUM(precipitation_in)            AS total_precip_in
-FROM weather_hourly
+    DATE_TRUNC('month', RECORDED_AT) AS month,
+    ROUND(AVG(TEMPERATURE_F), 1)     AS avg_temp_f,
+    ROUND(AVG(HUMIDITY_PCT), 1)      AS avg_humidity,
+    SUM(PRECIPITATION_IN)            AS total_precip_in
+FROM WEATHER_HOURLY
 GROUP BY 1
 ORDER BY 1;
 
 -- Coldest days of the year
 SELECT
-    DATE(recorded_at)                AS date,
-    MIN(temperature_f)               AS min_temp_f,
-    MAX(temperature_f)               AS max_temp_f
-FROM weather_hourly
+    DATE(RECORDED_AT)                AS date,
+    MIN(TEMPERATURE_F)               AS min_temp_f,
+    MAX(TEMPERATURE_F)               AS max_temp_f
+FROM WEATHER_HOURLY
 GROUP BY 1
 ORDER BY min_temp_f ASC
 LIMIT 10;
 
 -- Count of snowy hours (weather_code 71–77 = snow)
 SELECT COUNT(*) AS snowy_hours
-FROM weather_hourly
-WHERE weather_code BETWEEN 71 AND 77;
+FROM WEATHER_HOURLY
+WHERE WEATHER_CODE BETWEEN 71 AND 77;
 ```
 
 ---
@@ -190,10 +189,10 @@ WHERE weather_code BETWEEN 71 AND 77;
 Once the basics are working, try these to level up:
 
 - **Add more cities** — pass multiple locations in a loop
-- **Schedule it** — use a cron job or AWS Lambda to run it daily
+- **Schedule it** — use a cron job or Snowflake Tasks to run it daily
 - **Add error handling** — what if the API is down? Retry logic?
 - **Add a data quality check** — flag rows with extreme or impossible values
-- **Visualize the data** — connect a BI tool like Amazon QuickSight to your Redshift table
+- **Visualize the data** — connect a BI tool like Streamlit or Tableau to your Snowflake table
 
 ---
 
@@ -201,9 +200,9 @@ Once the basics are working, try these to level up:
 
 | Error | Likely cause | Fix |
 |-------|-------------|-----|
-| `connection refused` | Firewall blocking port 5439 | Add your IP to the security group inbound rules |
-| `password authentication failed` | Wrong password in .env | Double-check REDSHIFT_PASSWORD |
-| `relation does not exist` | Table not created yet | Run `sql/create_tables.sql` first |
+| `250001: Could not connect to Snowflake backend` | Wrong account identifier | Double-check `SNOWFLAKE_ACCOUNT` in .env — format is `orgname-accountname` |
+| `Incorrect username or password` | Wrong credentials in .env | Double-check `SNOWFLAKE_USER` and `SNOWFLAKE_PASSWORD` |
+| `Object 'WEATHER_HOURLY' does not exist` | Table not created yet | Run `sql/create_tables_snowflake.sql` first |
 | `ModuleNotFoundError` | Missing library | Run `pip install -r requirements.txt` |
 | API timeout | Slow network | The script has a 30-second timeout; try again |
 
@@ -213,5 +212,5 @@ Once the basics are working, try these to level up:
 
 - **ETL vs ELT** — search "ETL vs ELT data warehouse" to understand the difference
 - **pandas documentation** — https://pandas.pydata.org/docs/
-- **Redshift best practices** — search "Amazon Redshift distribution keys sortkeys"
-- **psycopg2 docs** — https://www.psycopg.org/docs/
+- **Snowflake best practices** — search "Snowflake clustering keys virtual warehouses"
+- **snowflake-connector-python docs** — https://docs.snowflake.com/en/developer-guide/python-connector/python-connector

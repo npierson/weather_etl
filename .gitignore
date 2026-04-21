@@ -5,3 +5,4 @@ __pycache__/
 .env
 *.pass
 virtual_weather_etl
+DELETE THIS SETUP.sql

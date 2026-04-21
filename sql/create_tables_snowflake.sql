@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS WEATHER_HOURLY (
 ALTER TABLE WEATHER_HOURLY
     ADD CONSTRAINT uq_weather_location_time
     UNIQUE (LOCATION_NAME, RECORDED_AT)
-    RELY NOVALIDATE;
+    RELY;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────

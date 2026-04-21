@@ -112,7 +112,7 @@ def transform_weather_data(raw_data: dict, location_name: str) -> pd.DataFrame:
     # The DataFrame column names above match the table columns in create_tables_snowflake.sql.
 
     # Convert the "RECORDED_AT" column from a string to a real datetime
-    df["RECORDED_AT"] = pd.to_datetime(df["RECORDED_AT"])
+    df = df.assign(RECORDED_AT=pd.to_datetime(df["RECORDED_AT"]))
 
     # Add metadata columns
     df["LOCATION_NAME"] = location_name
@@ -148,29 +148,24 @@ def load_to_snowflake(df: pd.DataFrame, table_name: str = "WEATHER_HOURLY") -> N
     conn = snowflake.connector.connect(**DB_CONFIG)
 
     try:
+        db    = DB_CONFIG["database"]
+        schema = DB_CONFIG["schema"]
+        fq_target  = f"{db}.{schema}.{table_name}"
+        fq_staging = f"{db}.{schema}.STAGING_{table_name}"
+
         with conn.cursor() as cursor:
-            # Ensure the database and schema exist (safe to run repeatedly)
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_CONFIG['database']}")
-            cursor.execute(f"USE DATABASE {DB_CONFIG['database']}")
-            cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {DB_CONFIG['schema']}")
-            cursor.execute(f"USE SCHEMA {DB_CONFIG['schema']}")
-
-            staging_table = f"STAGING_{table_name}"
-
             # Create a temp staging table with the same structure as the target
             # (TEMPORARY means it auto-drops when the session ends)
-            cursor.execute(f"""
-                CREATE TEMPORARY TABLE {staging_table} LIKE {table_name};
-            """)
+            cursor.execute(f"CREATE TEMPORARY TABLE {fq_staging} LIKE {fq_target};")
 
             # Bulk-load the DataFrame into the staging table using write_pandas
             # This is much faster than INSERT row-by-row for large datasets
             success, num_chunks, num_rows, output = write_pandas(
                 conn=conn,
                 df=df,
-                table_name=staging_table,
-                schema=DB_CONFIG["schema"],
-                database=DB_CONFIG["database"],
+                table_name=f"STAGING_{table_name}",
+                schema=schema,
+                database=db,
                 auto_create_table=False,
                 overwrite=False,
             )
@@ -179,8 +174,8 @@ def load_to_snowflake(df: pd.DataFrame, table_name: str = "WEATHER_HOURLY") -> N
             # MERGE: update existing rows or insert new ones (no duplicates)
             # Matches on location_name + recorded_at as the natural unique key
             cursor.execute(f"""
-                MERGE INTO {table_name} AS target
-                USING {staging_table} AS source
+                MERGE INTO {fq_target} AS target
+                USING {fq_staging} AS source
                     ON  target.LOCATION_NAME = source.LOCATION_NAME
                     AND target.RECORDED_AT   = source.RECORDED_AT
                 WHEN MATCHED THEN UPDATE SET

@@ -23,14 +23,21 @@ load_dotenv()
 # How to find your account identifier:
 #   Snowflake UI → bottom-left corner → hover your username → "Copy account identifier"
 #   Format is usually: <orgname>-<accountname>  (e.g. "myorg-myaccount")
+def _load_private_key(path: str):
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+    with open(path, "rb") as f:
+        return load_pem_private_key(f.read(), password=None)
+
+_private_key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH", "snowflake_private_key.pem")
+
 DB_CONFIG = {
-    "account":   os.getenv("SNOWFLAKE_ACCOUNT"),    # e.g. "myorg-myaccount"
-    "user":      os.getenv("SNOWFLAKE_USER"),        # e.g. "nat"
-    "password":  os.getenv("SNOWFLAKE_PASSWORD"),
-    "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),   # default warehouse name on free trial
-    "database":  os.getenv("SNOWFLAKE_DATABASE", "WEATHER_DB"),
-    "schema":    os.getenv("SNOWFLAKE_SCHEMA",   "WEATHER"),
-    "role":      os.getenv("SNOWFLAKE_ROLE",     "ACCOUNTADMIN"),  # ACCOUNTADMIN is default on free trial
+    "account":     os.getenv("SNOWFLAKE_ACCOUNT"),    # e.g. "myorg-myaccount"
+    "user":        os.getenv("SNOWFLAKE_USER"),        # e.g. "nat"
+    "private_key": _load_private_key(_private_key_path),
+    "warehouse":   os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
+    "database":    os.getenv("SNOWFLAKE_DATABASE", "WEATHER_DB"),
+    "schema":      os.getenv("SNOWFLAKE_SCHEMA",   "WEATHER"),
+    "role":        os.getenv("SNOWFLAKE_ROLE",     "ACCOUNTADMIN"),
 }
 
 
