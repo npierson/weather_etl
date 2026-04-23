@@ -6,3 +6,4 @@ __pycache__/
 *.pass
 virtual_weather_etl
 DELETE THIS SETUP.sql
+*.pem
