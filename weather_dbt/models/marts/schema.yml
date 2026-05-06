@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: daily_weather
+    description: "One row per (location, day) — daily aggregates of the hourly readings in WEATHER_HOURLY."
+    columns:
+      - name: location_name
+        description: "Human-readable location label."
+        tests:
+          - not_null
+      - name: weather_date
+        description: "Calendar date of the reading (America/New_York)."
+        tests:
+          - not_null
+      - name: latitude
+      - name: longitude
+      - name: hours_recorded
+        description: "Number of hourly readings rolled up into this row. Should be ≤ 24."
+        tests:
+          - not_null
+      - name: avg_temperature_f
+        tests:
+          - not_null
+      - name: min_temperature_f
+      - name: max_temperature_f
+      - name: avg_humidity_pct
+      - name: total_precipitation_in
+      - name: avg_wind_speed_mph
+      - name: max_wind_speed_mph

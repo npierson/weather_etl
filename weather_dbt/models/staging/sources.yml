@@ -1,0 +1,31 @@
+version: 2
+
+sources:
+  - name: weather_raw
+    description: "Raw hourly weather data loaded by etl.py from the Open-Meteo API."
+    database: WEATHER_DB
+    schema: WEATHER
+    tables:
+      - name: WEATHER_HOURLY
+        description: "One row per location per hour."
+        config:
+          loaded_at_field: RECORDED_AT
+          freshness:
+            warn_after: {count: 24, period: hour}
+            error_after: {count: 48, period: hour}
+        columns:
+          - name: RECORDED_AT
+            description: "Hour the reading was taken (America/New_York)."
+            tests:
+              - not_null
+          - name: LOCATION_NAME
+            description: "Human-readable location label (e.g. 'Boston, MA')."
+            tests:
+              - not_null
+          - name: LATITUDE
+          - name: LONGITUDE
+          - name: TEMPERATURE_F
+          - name: HUMIDITY_PCT
+          - name: PRECIPITATION_IN
+          - name: WIND_SPEED_MPH
+          - name: WEATHER_CODE

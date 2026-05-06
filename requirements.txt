@@ -2,7 +2,8 @@
 # Install all dependencies with:
 #   pip install -r requirements.txt
 
-requests==2.32.3                    # Making HTTP API calls
+requests==2.33.1                    # Making HTTP API calls
 pandas==2.2.3                       # Working with tabular data
 snowflake-connector-python[pandas]  # Connecting to Snowflake (includes write_pandas support)
 python-dotenv==1.0.1                # Loading credentials from the .env file
+dbt-snowflake==1.11.0               # dbt adapter for Snowflake (aligned with dbt-core 1.11)
