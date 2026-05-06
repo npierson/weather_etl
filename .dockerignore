@@ -1,0 +1,19 @@
+# Don't ship the local venv, secrets, build artifacts, or dev metadata.
+virtual_weather_etl/
+.git/
+.claude/
+.dbt/
+__pycache__/
+**/__pycache__/
+*.pyc
+.env
+.env.example
+*.pem
+*.pub
+weather_dbt/target/
+weather_dbt/logs/
+weather_dbt/dbt_packages/
+logs/
+output.log
+*.log
+.DS_Store

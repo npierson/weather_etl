@@ -1,0 +1,15 @@
+weather_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account:          "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user:             "{{ env_var('SNOWFLAKE_USER') }}"
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      # Hardcoded so SNOWFLAKE_SCHEMA (used by etl.py for the raw schema)
+      # doesn't bleed into dbt's marts schema.
+      role:      etl_role
+      database:  WEATHER_DB
+      warehouse: etl_wh
+      schema:    WEATHER_DBT
+      threads: 4

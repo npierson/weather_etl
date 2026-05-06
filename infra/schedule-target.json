@@ -1,0 +1,16 @@
+{
+  "Arn": "arn:aws:ecs:us-west-2:351578878554:cluster/weather-etl",
+  "RoleArn": "arn:aws:iam::351578878554:role/weather-etl-scheduler-role",
+  "EcsParameters": {
+    "TaskDefinitionArn": "arn:aws:ecs:us-west-2:351578878554:task-definition/weather-etl",
+    "TaskCount": 1,
+    "LaunchType": "FARGATE",
+    "NetworkConfiguration": {
+      "awsvpcConfiguration": {
+        "Subnets": ["subnet-032b35e03736a3004"],
+        "SecurityGroups": ["sg-00788a212f801b9b1"],
+        "AssignPublicIp": "ENABLED"
+      }
+    }
+  }
+}

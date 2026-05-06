@@ -1,0 +1,43 @@
+{
+  "family": "weather-etl",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "256",
+  "memory": "512",
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::351578878554:role/weather-etl-task-execution-role",
+  "containerDefinitions": [
+    {
+      "name": "app",
+      "image": "351578878554.dkr.ecr.us-west-2.amazonaws.com/weather-etl:latest",
+      "essential": true,
+      "environment": [
+        {"name": "WEATHER_LOCATION_NAME", "value": "Boston, MA"},
+        {"name": "WEATHER_LATITUDE",      "value": "42.36"},
+        {"name": "WEATHER_LONGITUDE",     "value": "-71.06"},
+        {"name": "WEATHER_START_DATE",    "value": "2025-01-01"},
+        {"name": "WEATHER_END_DATE",      "value": "yesterday"},
+        {"name": "SNOWFLAKE_WAREHOUSE",   "value": "etl_wh"},
+        {"name": "SNOWFLAKE_DATABASE",    "value": "WEATHER_DB"},
+        {"name": "SNOWFLAKE_SCHEMA",      "value": "WEATHER"},
+        {"name": "SNOWFLAKE_ROLE",        "value": "etl_role"}
+      ],
+      "secrets": [
+        {"name": "SNOWFLAKE_ACCOUNT",     "valueFrom": "arn:aws:secretsmanager:us-west-2:351578878554:secret:weather-etl/snowflake-5dzmas:account::"},
+        {"name": "SNOWFLAKE_USER",        "valueFrom": "arn:aws:secretsmanager:us-west-2:351578878554:secret:weather-etl/snowflake-5dzmas:user::"},
+        {"name": "SNOWFLAKE_PRIVATE_KEY", "valueFrom": "arn:aws:secretsmanager:us-west-2:351578878554:secret:weather-etl/snowflake-5dzmas:private_key::"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/weather-etl",
+          "awslogs-region": "us-west-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
