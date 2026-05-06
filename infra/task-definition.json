@@ -15,9 +15,6 @@
       "image": "351578878554.dkr.ecr.us-west-2.amazonaws.com/weather-etl:latest",
       "essential": true,
       "environment": [
-        {"name": "WEATHER_LOCATION_NAME", "value": "Boston, MA"},
-        {"name": "WEATHER_LATITUDE",      "value": "42.36"},
-        {"name": "WEATHER_LONGITUDE",     "value": "-71.06"},
         {"name": "WEATHER_START_DATE",    "value": "2025-01-01"},
         {"name": "WEATHER_END_DATE",      "value": "yesterday"},
         {"name": "SNOWFLAKE_WAREHOUSE",   "value": "etl_wh"},

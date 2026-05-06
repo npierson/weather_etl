@@ -55,18 +55,22 @@ DB_CONFIG = {
 # ─────────────────────────────────────────────
 # WEATHER SETTINGS
 # ─────────────────────────────────────────────
-# Change these to pull weather for a different city or date range.
-WEATHER_CONFIG = {
-    "location_name": os.getenv("WEATHER_LOCATION_NAME", "Boston, MA"),
 
-    # Latitude and longitude of your city
-    # Boston: 42.36, -71.06  |  New York: 40.71, -74.01  |  Chicago: 41.88, -87.63
-    "latitude":  float(os.getenv("WEATHER_LATITUDE",  "42.36")),
-    "longitude": float(os.getenv("WEATHER_LONGITUDE", "-71.06")),
-
-    # Date range — pull up to 1 year at a time for best performance.
-    # Format: "YYYY-MM-DD". The end_date also accepts the sentinels
-    # "yesterday" or "today" for a rolling window.
+# Date range — shared across all cities.
+# end_date accepts "yesterday" or "today" as rolling sentinels.
+DATE_CONFIG = {
     "start_date": os.getenv("WEATHER_START_DATE", "2025-01-01"),
-    "end_date":   _resolve_end_date(os.getenv("WEATHER_END_DATE", "2025-12-31")),
+    "end_date":   _resolve_end_date(os.getenv("WEATHER_END_DATE", "yesterday")),
 }
+
+# Cities to pull weather for.
+# Add or remove entries here to change what gets loaded.
+# Lat/lon lookup tip: search "<city> coordinates" — Open-Meteo snaps to the
+# nearest grid point automatically, so 2-decimal precision is plenty.
+CITIES = [
+    {"location_name": "Boston, MA",   "latitude": 42.36,  "longitude": -71.06},
+    {"location_name": "New York, NY", "latitude": 40.71,  "longitude": -74.01},
+    {"location_name": "Chicago, IL",  "latitude": 41.88,  "longitude": -87.63},
+    {"location_name": "Miami, FL",    "latitude": 25.76,  "longitude": -80.19},
+    {"location_name": "Seattle, WA",  "latitude": 47.61,  "longitude": -122.33},
+]

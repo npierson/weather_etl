@@ -17,7 +17,7 @@ import pandas as pd                      # for working with tabular data
 import snowflake.connector               # for connecting to Snowflake
 from snowflake.connector.pandas_tools import write_pandas  # fast bulk load via pandas
 import logging                           # for printing helpful status messages
-from config import DB_CONFIG, WEATHER_CONFIG
+from config import DB_CONFIG, DATE_CONFIG, CITIES
 
 # ─────────────────────────────────────────────
 # SETUP: Configure logging so we can track progress
@@ -215,34 +215,35 @@ def load_to_snowflake(df: pd.DataFrame, table_name: str = "WEATHER_HOURLY") -> N
 # ─────────────────────────────────────────────
 def run_pipeline():
     """
-    Orchestrates the full Extract → Transform → Load pipeline.
-    Edit WEATHER_CONFIG in config.py to change location and date range.
+    Orchestrates the full Extract → Transform → Load pipeline for every city
+    defined in CITIES (config.py). Add or remove cities there to change what
+    gets loaded — no changes needed here.
     """
     log.info("=" * 50)
     log.info("Starting Weather ETL Pipeline (Snowflake)")
+    log.info(f"Date range: {DATE_CONFIG['start_date']} → {DATE_CONFIG['end_date']}")
+    log.info(f"Cities: {', '.join(c['location_name'] for c in CITIES)}")
     log.info("=" * 50)
 
-    # EXTRACT
-    raw = extract_weather_data(
-        latitude=WEATHER_CONFIG["latitude"],
-        longitude=WEATHER_CONFIG["longitude"],
-        start_date=WEATHER_CONFIG["start_date"],
-        end_date=WEATHER_CONFIG["end_date"],
-    )
+    for i, city in enumerate(CITIES, start=1):
+        log.info(f"\n[{i}/{len(CITIES)}] Processing {city['location_name']}...")
 
-    # TRANSFORM
-    df = transform_weather_data(raw, location_name=WEATHER_CONFIG["location_name"])
+        # EXTRACT
+        raw = extract_weather_data(
+            latitude=city["latitude"],
+            longitude=city["longitude"],
+            start_date=DATE_CONFIG["start_date"],
+            end_date=DATE_CONFIG["end_date"],
+        )
 
-    # Preview the data before loading (great for debugging!)
-    log.info("\nSample of data to be loaded:")
-    print(df.head(5).to_string(index=False))
-    print()
+        # TRANSFORM
+        df = transform_weather_data(raw, location_name=city["location_name"])
 
-    # LOAD
-    load_to_snowflake(df, table_name="WEATHER_HOURLY")
+        # LOAD
+        load_to_snowflake(df, table_name="WEATHER_HOURLY")
 
-    log.info("=" * 50)
-    log.info("Pipeline complete!")
+    log.info("\n" + "=" * 50)
+    log.info(f"Pipeline complete! Processed {len(CITIES)} cities.")
     log.info("=" * 50)
 
 
