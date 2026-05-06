@@ -54,6 +54,10 @@ python3 -m venv virtual_weather_etl
 
 # Activate it (run this every time you open a new terminal)
 source virtual_weather_etl/bin/activate
+
+# Deactivate python env
+deactivate
+
 ```
 
 Once activated, your prompt will show `(virtual_weather_etl)`. Then install dependencies:

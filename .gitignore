@@ -1,9 +1,27 @@
+# Secrets — never commit
 .env
+*.pem
+*.pub
+*.pass
+
+# Python
 venv/
+virtual_weather_etl/
 __pycache__/
 *.pyc
-.env
-*.pass
-virtual_weather_etl
+
+# Runtime / logs
+logs/
+*.log
+
+# dbt build artifacts
+weather_dbt/target/
+weather_dbt/logs/
+weather_dbt/dbt_packages/
+
+# Editor / OS
+.DS_Store
+.claude/
+
+# Project-specific
 DELETE THIS SETUP.sql
-*.pem
