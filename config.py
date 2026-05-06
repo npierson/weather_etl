@@ -8,6 +8,7 @@ IMPORTANT: Never hardcode passwords or credentials directly in Python files.
 """
 
 import os
+from datetime import date, timedelta
 from dotenv import load_dotenv
 
 # Load variables from your .env file into the environment
@@ -29,6 +30,16 @@ def _load_private_key(path: str):
         return load_pem_private_key(f.read(), password=None)
 
 _private_key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH", "snowflake_private_key.pem")
+
+
+def _resolve_end_date(value: str) -> str:
+    today = date.today()
+    v = (value or "").strip().lower()
+    if v in ("", "yesterday"):
+        return (today - timedelta(days=1)).isoformat()
+    if v == "today":
+        return today.isoformat()
+    return value
 
 DB_CONFIG = {
     "account":     os.getenv("SNOWFLAKE_ACCOUNT"),    # e.g. "myorg-myaccount"
@@ -53,8 +64,9 @@ WEATHER_CONFIG = {
     "latitude":  float(os.getenv("WEATHER_LATITUDE",  "42.36")),
     "longitude": float(os.getenv("WEATHER_LONGITUDE", "-71.06")),
 
-    # Date range — pull up to 1 year at a time for best performance
-    # Format: "YYYY-MM-DD"
+    # Date range — pull up to 1 year at a time for best performance.
+    # Format: "YYYY-MM-DD". The end_date also accepts the sentinels
+    # "yesterday" or "today" for a rolling window.
     "start_date": os.getenv("WEATHER_START_DATE", "2025-01-01"),
-    "end_date":   os.getenv("WEATHER_END_DATE",   "2025-12-31"),
+    "end_date":   _resolve_end_date(os.getenv("WEATHER_END_DATE", "2025-12-31")),
 }

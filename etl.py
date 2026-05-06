@@ -111,8 +111,10 @@ def transform_weather_data(raw_data: dict, location_name: str) -> pd.DataFrame:
     # NOTE: Snowflake column names are uppercase by default.
     # The DataFrame column names above match the table columns in create_tables_snowflake.sql.
 
-    # Convert the "RECORDED_AT" column from a string to a real datetime
-    df = df.assign(RECORDED_AT=pd.to_datetime(df["RECORDED_AT"]))
+    # Parse for validation, then re-serialize as ISO strings before write_pandas.
+    # write_pandas with datetime64[ns]/[us] dtypes ships the raw int representation
+    # to Snowflake unscaled, corrupting TIMESTAMP_NTZ values. Strings round-trip cleanly.
+    df["RECORDED_AT"] = pd.to_datetime(df["RECORDED_AT"]).dt.strftime("%Y-%m-%d %H:%M:%S")
 
     # Add metadata columns
     df["LOCATION_NAME"] = location_name
