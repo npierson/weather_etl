@@ -27,8 +27,22 @@ weather_etl/
 ├── config.py           ← Loads your settings from .env
 ├── .env.example        ← Template for your credentials (copy → .env)
 ├── requirements.txt    ← Python libraries to install
-└── sql/
-    └── create_tables_snowflake.sql  ← Run this once in Snowflake to create the table
+├── Dockerfile          ← Container image for AWS Fargate
+├── sql/
+│   ├── create_tables_snowflake.sql  ← Run this once in Snowflake
+│   └── snowflake_queries.sql        ← Scratch / exploratory queries
+├── weather_dbt/        ← dbt project — staging + marts + tests
+│   ├── models/
+│   │   ├── staging/        (stg_weather_hourly + sources.yml)
+│   │   └── marts/          (dim_location, daily_weather, schema.yml)
+│   └── tests/              (10 singular tests guarding correctness)
+├── docker/
+│   ├── entrypoint.sh   ← Runs etl.py then `dbt build` inside the container
+│   └── profiles.yml    ← dbt connection profile (uses key auth)
+└── infra/
+    ├── AWS_SERVICES.md       ← Inventory of every AWS resource in use
+    ├── task-definition.json  ← ECS Fargate task definition
+    └── schedule-target.json  ← EventBridge daily trigger
 ```
 
 ---
@@ -101,21 +115,22 @@ You'll need this for the `.env` file:
 ```
 SNOWFLAKE_ACCOUNT=your-org-your-account
 SNOWFLAKE_USER=your_username
-SNOWFLAKE_PASSWORD=your_password_here
+SNOWFLAKE_PRIVATE_KEY_PATH=snowflake_private_key.pem
 SNOWFLAKE_WAREHOUSE=COMPUTE_WH
 SNOWFLAKE_DATABASE=WEATHER_DB
 SNOWFLAKE_SCHEMA=WEATHER
 SNOWFLAKE_ROLE=ACCOUNTADMIN
 
-WEATHER_LOCATION_NAME=Boston, MA
-WEATHER_LATITUDE=42.36
-WEATHER_LONGITUDE=-71.06
 WEATHER_START_DATE=2025-01-01
-WEATHER_END_DATE=2025-12-31
+WEATHER_END_DATE=yesterday   # also accepts "today" or a literal YYYY-MM-DD
 ```
 
-> ⚠️ **Never share your `.env` file or upload it to GitHub.**
-> Add `.env` to your `.gitignore` if using version control.
+This project uses **key-pair authentication** rather than passwords. Generate a key pair and register the public key with your Snowflake user — see Snowflake's [key-pair authentication guide](https://docs.snowflake.com/en/user-guide/key-pair-auth). Save the private key as `snowflake_private_key.pem` in the project root (or update `SNOWFLAKE_PRIVATE_KEY_PATH` to point elsewhere).
+
+The list of cities is in `config.py`, not `.env` — edit `CITIES` there to add/remove locations.
+
+> ⚠️ **Never share your `.env` file or `snowflake_private_key.pem`, and never commit them to GitHub.**
+> Both are already in `.gitignore`.
 
 ---
 
@@ -152,6 +167,19 @@ You should see output like:
 
 ---
 
+### Step 7 — Build the modeled tables with dbt
+
+Once raw data is in `WEATHER_HOURLY`, run dbt to build the staging view, dimension table, and daily fact table — and run all data quality tests:
+
+```bash
+cd weather_dbt
+dbt build
+```
+
+This creates `STG_WEATHER_HOURLY`, `DIM_LOCATION`, and `DAILY_WEATHER` in the `WEATHER_DBT` schema, and runs ~30 generic + singular tests. See the [dbt section](#-dbt--modeling-and-tests) below for what each model does and how to browse the lineage docs.
+
+---
+
 ## 🔍 Explore your data
 
 After loading, open a Snowflake Worksheet and try these queries:
@@ -185,6 +213,129 @@ SELECT COUNT(*) AS snowy_hours
 FROM WEATHER_HOURLY
 WHERE WEATHER_CODE BETWEEN 71 AND 77;
 ```
+
+---
+
+## 📊 Data model — star schema in Snowflake
+
+The pipeline lands raw data in a single `WEATHER` schema, and dbt models a small star schema in a separate `WEATHER_DBT` schema for analytics.
+
+```
+WEATHER_DB
+├── WEATHER schema  (raw landing zone, written by etl.py)
+│   └── WEATHER_HOURLY        ← one row per (city, hour)
+│
+└── WEATHER_DBT schema  (modeled by dbt)
+    ├── STG_WEATHER_HOURLY    ← view: light cleanup of WEATHER_HOURLY
+    ├── DIM_LOCATION          ← dimension: one row per city
+    └── DAILY_WEATHER         ← fact: one row per (location_id, day)
+```
+
+### Tables
+
+| Table | Grain | Purpose |
+|---|---|---|
+| `WEATHER_HOURLY` | one row per city per hour | Raw landing zone, source of truth |
+| `STG_WEATHER_HOURLY` | same | Staging view — typed and renamed |
+| `DIM_LOCATION` | one row per city | Holds `location_id` (md5 surrogate key), `city`, `state_code`, `country_code`, `latitude`, `longitude`, `timezone` |
+| `DAILY_WEATHER` | one row per (location, day) | Aggregated metrics; joins to `DIM_LOCATION` on `location_id` |
+
+Why split locations into a dim? Adding a new attribute (e.g., `population`, `elevation`) means editing one file (`dim_location.sql`) and every fact table that joins on `location_id` benefits without changes. Dim and fact split also makes referential integrity testable — see the `relationships` test in `weather_dbt/models/marts/schema.yml`.
+
+---
+
+## 🔁 dbt — modeling and tests
+
+The `weather_dbt/` directory is a [dbt](https://docs.getdbt.com) project that builds the modeled tables and runs ~30 data quality tests (generic + singular) every refresh.
+
+### Run it
+
+```bash
+cd weather_dbt
+dbt build                # rebuild all models + run all tests
+dbt build --full-refresh # rebuild from scratch (use after schema changes
+                         #   or backfilling raw history into WEATHER_HOURLY)
+dbt test                 # tests only, no rebuild
+dbt source freshness     # confirm raw landing table is recent
+```
+
+### Materialization choices
+- `stg_weather_hourly` → **view** (cheap, always fresh, just renames + casts)
+- `dim_location` → **table** (small, full rebuild each run)
+- `daily_weather` → **incremental** (only re-aggregates `max(weather_date) - 1` onward; pass `--full-refresh` to recompute history)
+
+### Tests
+
+10 singular tests in `weather_dbt/tests/` plus generic tests declared in `schema.yml`:
+
+| Test | Catches |
+|---|---|
+| `weather_hourly_freshness` | Daily ETL didn't run (raw table > 36h old) |
+| `daily_weather_all_cities_recent` | One city's API call failed but others succeeded |
+| `daily_weather_covers_source_history` | Mart's date range diverged from source's (incremental gap) |
+| `daily_weather_no_date_gaps` | Missing day for a city |
+| `daily_weather_metric_ranges` | Humidity/precip/wind out of plausible bounds |
+| `daily_weather_temperature_sane` | Temperatures outside earth-surface bounds |
+| `daily_weather_avg_between_min_max` | Aggregation bug — daily avg outside [min, max] |
+| `daily_weather_unique_per_location_date` | Duplicate facts |
+| `daily_weather_hours_recorded_in_range` | Day with > 25 hourly readings |
+| `dim_location_geocoords_valid` | Lat/lon outside earth-surface bounds |
+
+### Browse lineage and column docs
+
+```bash
+dbt docs generate    # produces target/index.html + manifest.json + catalog.json
+dbt docs serve       # local web UI on http://localhost:8080
+```
+
+The docs site renders the lineage graph (sources → staging → marts), every column's description and type, and the test status for each model.
+
+---
+
+## ☁️ AWS deployment — daily on Fargate
+
+The pipeline is containerized and runs daily on AWS Fargate (ARM64 / Graviton) in `us-west-2`. Both `etl.py` and `dbt build` execute inside the same container, per `docker/entrypoint.sh`.
+
+### Resources
+
+| Resource | Identifier |
+|---|---|
+| ECR image | `351578878554.dkr.ecr.us-west-2.amazonaws.com/weather-etl:latest` |
+| ECS cluster | `weather-etl` |
+| Task definition | `weather-etl` (0.25 vCPU, 512 MB, ARM64) |
+| Schedule | EventBridge `weather-etl-daily` → `cron(0 13 * * ? *)` UTC (~6am Pacific) |
+| Secret | Secrets Manager `weather-etl/snowflake` (account, user, private key) |
+| Logs | CloudWatch `/ecs/weather-etl` (14-day retention) |
+
+Full inventory and IAM details: `infra/AWS_SERVICES.md`.
+
+### Iterate (build → push → trigger)
+
+```bash
+# 1. Build for ARM64 (matches Fargate Graviton)
+docker build --platform linux/arm64 -t weather-etl:dev .
+
+# 2. Auth + tag + push to ECR
+aws ecr get-login-password --region us-west-2 \
+  | docker login --username AWS --password-stdin 351578878554.dkr.ecr.us-west-2.amazonaws.com
+docker tag weather-etl:dev 351578878554.dkr.ecr.us-west-2.amazonaws.com/weather-etl:vN
+docker tag weather-etl:dev 351578878554.dkr.ecr.us-west-2.amazonaws.com/weather-etl:latest
+docker push 351578878554.dkr.ecr.us-west-2.amazonaws.com/weather-etl:vN
+docker push 351578878554.dkr.ecr.us-west-2.amazonaws.com/weather-etl:latest
+
+# 3. Trigger an out-of-band run (or just wait for the daily fire)
+aws ecs run-task \
+  --cluster weather-etl \
+  --task-definition weather-etl \
+  --launch-type FARGATE \
+  --region us-west-2 \
+  --network-configuration 'awsvpcConfiguration={subnets=[subnet-032b35e03736a3004],securityGroups=[sg-00788a212f801b9b1],assignPublicIp=ENABLED}'
+
+# 4. Tail logs
+aws logs tail /ecs/weather-etl --region us-west-2 --follow
+```
+
+The MERGE in `etl.py` (on `LOCATION_NAME, RECORDED_AT`) and the dbt incremental MERGE in `daily_weather.sql` (on `location_id, weather_date`) are both idempotent, so re-running over an overlapping date range is safe.
 
 ---
 
