@@ -1,15 +1,28 @@
 {{ config(
     materialized='incremental',
-    unique_key=['location_name', 'weather_date'],
+    unique_key=['location_id', 'weather_date'],
     incremental_strategy='merge'
 ) }}
 
+-- Fact table: one row per (location_id, day).
+-- Joins to dim_location via location_id; latitude/longitude/location_name
+-- now live in dim_location, not here.
+
 with hourly as (
 
-    select * from {{ ref('stg_weather_hourly') }}
+    select
+        h.recorded_at,
+        h.temperature_f,
+        h.humidity_pct,
+        h.precipitation_in,
+        h.wind_speed_mph,
+        dl.location_id
+    from {{ ref('stg_weather_hourly') }} h
+    inner join {{ ref('dim_location') }} dl
+        on h.location_name = dl.location_name
     {% if is_incremental() %}
         -- Re-aggregate the latest day in case more hours arrived since last run.
-        where recorded_at >= (select dateadd('day', -1, max(weather_date)) from {{ this }})
+        where h.recorded_at >= (select dateadd('day', -1, max(weather_date)) from {{ this }})
     {% endif %}
 
 ),
@@ -17,10 +30,8 @@ with hourly as (
 daily as (
 
     select
-        location_name,
+        location_id,
         cast(recorded_at as date)             as weather_date,
-        any_value(latitude)                   as latitude,
-        any_value(longitude)                  as longitude,
         count(*)                              as hours_recorded,
         avg(temperature_f)                    as avg_temperature_f,
         min(temperature_f)                    as min_temperature_f,

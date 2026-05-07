@@ -2,18 +2,20 @@ version: 2
 
 models:
   - name: daily_weather
-    description: "One row per (location, day) — daily aggregates of the hourly readings in WEATHER_HOURLY."
+    description: "Fact table — one row per (location_id, day). Daily aggregates of the hourly readings in WEATHER_HOURLY. Join to dim_location via location_id for human-readable name/lat/lon/timezone."
     columns:
-      - name: location_name
-        description: "Human-readable location label."
+      - name: location_id
+        description: "Foreign key to dim_location.location_id."
         tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_id
       - name: weather_date
         description: "Calendar date of the reading (America/New_York)."
         tests:
           - not_null
-      - name: latitude
-      - name: longitude
       - name: hours_recorded
         description: "Number of hourly readings rolled up into this row. Should be ≤ 24."
         tests:
@@ -27,3 +29,39 @@ models:
       - name: total_precipitation_in
       - name: avg_wind_speed_mph
       - name: max_wind_speed_mph
+
+  - name: dim_location
+    description: "One row per distinct city loaded by the ETL. Decomposes the 'City, ST' label into queryable parts and adds timezone."
+    columns:
+      - name: location_id
+        description: "Surrogate key — md5 hash of location_name. Stable across rebuilds."
+        tests:
+          - unique
+          - not_null
+      - name: location_name
+        description: "Natural key — the original 'City, ST' string written by etl.py."
+        tests:
+          - unique
+          - not_null
+      - name: city
+        tests:
+          - not_null
+      - name: state_code
+        tests:
+          - not_null
+      - name: country_code
+        tests:
+          - not_null
+      - name: latitude
+        tests:
+          - not_null
+      - name: longitude
+        tests:
+          - not_null
+      - name: timezone
+        description: "IANA timezone for the city. NULL means a new city was added without a mapping in dim_location.sql — fix the case statement."
+        tests:
+          - not_null
+      - name: dbt_updated_at
+        tests:
+          - not_null

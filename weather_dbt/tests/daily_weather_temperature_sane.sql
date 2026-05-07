@@ -2,7 +2,7 @@
 -- Catches unit-conversion regressions (e.g. silently switching back to Celsius).
 -- Test passes when this query returns zero rows.
 select
-    location_name,
+    location_id,
     weather_date,
     min_temperature_f,
     avg_temperature_f,

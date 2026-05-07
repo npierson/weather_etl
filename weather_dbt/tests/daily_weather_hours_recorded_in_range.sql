@@ -2,7 +2,7 @@
 -- (DST springs/falls give 23 or 25, so we allow 25 to avoid false positives.)
 -- Test passes when this query returns zero rows.
 select
-    location_name,
+    location_id,
     weather_date,
     hours_recorded
 from {{ ref('daily_weather') }}
