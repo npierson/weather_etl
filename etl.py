@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 # ─────────────────────────────────────────────
 # STEP 1: EXTRACT — Pull data from the API
 # ─────────────────────────────────────────────
-def extract_weather_data(latitude: float, longitude: float, start_date: str, end_date: str) -> dict:
+def extract_weather_data(latitude: float, longitude: float, start_date: str, end_date: str, timezone: str) -> dict:
     """
     Calls the Open-Meteo historical weather API and returns raw JSON data.
 
@@ -41,11 +41,13 @@ def extract_weather_data(latitude: float, longitude: float, start_date: str, end
         longitude:  Location longitude (e.g. -71.06 for Boston)
         start_date: Start of date range in "YYYY-MM-DD" format
         end_date:   End of date range in "YYYY-MM-DD" format
+        timezone:   IANA timezone (e.g. "America/Chicago"). Determines what
+                    local-time the returned hourly timestamps refer to.
 
     Returns:
         A dictionary (JSON) containing hourly weather readings
     """
-    log.info(f"Fetching weather data for ({latitude}, {longitude}) from {start_date} to {end_date}...")
+    log.info(f"Fetching weather data for ({latitude}, {longitude}) [{timezone}] from {start_date} to {end_date}...")
 
     # The Open-Meteo API URL — no API key needed!
     url = "https://archive-api.open-meteo.com/v1/archive"
@@ -66,7 +68,7 @@ def extract_weather_data(latitude: float, longitude: float, start_date: str, end
         "temperature_unit": "fahrenheit",  # Switch to Fahrenheit if you prefer
         "wind_speed_unit": "mph",
         "precipitation_unit": "inch",
-        "timezone": "America/New_York",
+        "timezone": timezone,
     }
 
     # Make the API call
@@ -234,6 +236,7 @@ def run_pipeline():
             longitude=city["longitude"],
             start_date=DATE_CONFIG["start_date"],
             end_date=DATE_CONFIG["end_date"],
+            timezone=city["timezone"],
         )
 
         # TRANSFORM

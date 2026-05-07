@@ -68,9 +68,9 @@ DATE_CONFIG = {
 # Lat/lon lookup tip: search "<city> coordinates" — Open-Meteo snaps to the
 # nearest grid point automatically, so 2-decimal precision is plenty.
 CITIES = [
-    {"location_name": "Boston, MA",   "latitude": 42.36,  "longitude": -71.06},
-    {"location_name": "New York, NY", "latitude": 40.71,  "longitude": -74.01},
-    {"location_name": "Chicago, IL",  "latitude": 41.88,  "longitude": -87.63},
-    {"location_name": "Miami, FL",    "latitude": 25.76,  "longitude": -80.19},
-    {"location_name": "Seattle, WA",  "latitude": 47.61,  "longitude": -122.33},
+    {"location_name": "Boston, MA",   "latitude": 42.36,  "longitude": -71.06,   "timezone": "America/New_York"},
+    {"location_name": "New York, NY", "latitude": 40.71,  "longitude": -74.01,   "timezone": "America/New_York"},
+    {"location_name": "Chicago, IL",  "latitude": 41.88,  "longitude": -87.63,   "timezone": "America/Chicago"},
+    {"location_name": "Miami, FL",    "latitude": 25.76,  "longitude": -80.19,   "timezone": "America/New_York"},
+    {"location_name": "Seattle, WA",  "latitude": 47.61,  "longitude": -122.33,  "timezone": "America/Los_Angeles"},
 ]
