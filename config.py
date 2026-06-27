@@ -65,8 +65,14 @@ DATE_CONFIG = {
 
 # Cities to pull weather for.
 # Add or remove entries here to change what gets loaded.
-# Lat/lon lookup tip: search "<city> coordinates" — Open-Meteo snaps to the
-# nearest grid point automatically, so 2-decimal precision is plenty.
+# Required keys per entry: location_name, latitude, longitude, timezone.
+#   - timezone is an IANA name (e.g. "America/Chicago") — Open-Meteo uses it
+#     to label hourly timestamps. Mismatched timezone shifts daily aggregates.
+#   - Lat/lon lookup tip: search "<city> coordinates" — Open-Meteo snaps to
+#     the nearest grid point automatically, so 2-decimal precision is plenty.
+# If you add a city here, also add a corresponding case in the timezone CASE
+# statement in weather_dbt/models/marts/dim_location.sql until the two are
+# unified (see PR #1 review note).
 CITIES = [
     {"location_name": "Boston, MA",   "latitude": 42.36,  "longitude": -71.06,   "timezone": "America/New_York"},
     {"location_name": "New York, NY", "latitude": 40.71,  "longitude": -74.01,   "timezone": "America/New_York"},
