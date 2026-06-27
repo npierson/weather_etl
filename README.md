@@ -1,9 +1,9 @@
 # 🌦️ Weather ETL Pipeline — Python Practice Project
 
-A beginner-friendly ETL (Extract, Transform, Load) pipeline that pulls historical
+An ETL (Extract, Transform, Load) pipeline that pulls historical
 weather data from a free public API and loads it into Snowflake.
 
-**What you'll practice:**
+**Covering these bases:**
 - Calling a public REST API with `requests`
 - Cleaning and reshaping data with `pandas`
 - Connecting to a cloud database with `snowflake-connector-python`
